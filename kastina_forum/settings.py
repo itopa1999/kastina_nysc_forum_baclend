@@ -38,7 +38,8 @@ SYSTEM_DEFINE_APPS = [
 
 APPLICATION_APPS = [
     'administrator',
-    'forum'
+    'forum',
+    'chat'
 ]
 
 THIRD_PARTIES_APPS = [
@@ -46,7 +47,8 @@ THIRD_PARTIES_APPS = [
     "corsheaders",
     "rest_framework_simplejwt.token_blacklist",
     "rest_framework_simplejwt",
-    'drf_yasg'    
+    'drf_yasg',
+    'channels'  
 ]
 
 INSTALLED_APPS = SYSTEM_DEFINE_APPS + APPLICATION_APPS + THIRD_PARTIES_APPS
@@ -55,6 +57,7 @@ INSTALLED_APPS = SYSTEM_DEFINE_APPS + APPLICATION_APPS + THIRD_PARTIES_APPS
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -64,6 +67,8 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'kastina_forum.urls'
 AUTH_USER_MODEL ='administrator.User'
+
+
 
 TEMPLATES = [
     {
@@ -82,7 +87,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'kastina_forum.wsgi.application'
-
+ASGI_APPLICATION = "kastina_forum.asgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
@@ -93,6 +98,16 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('127.0.0.1', 6379)],
+        },
+    },
+}
+
 
 
 # Password validation
@@ -137,6 +152,18 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 
 CORS_ALLOW_ALL_ORIGINS = True
 
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:8000",
+#     "http://localhost:5500"
+# ]
+
+# CSRF_TRUSTED_ORIGINS = [
+#     "http://localhost:8000",
+#     "http://localhost:5500"
+# ]
+
+
+APPEND_SLASH = False
 
 
 SIMPLE_JWT = {
@@ -189,6 +216,8 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ),
+    "EXCEPTION_HANDLER": "drf_standardized_errors.handler.exception_handler",
+
 }
 
 
@@ -203,4 +232,78 @@ SWAGGER_SETTINGS = {
     },
     'USE_SESSION_AUTH': False,
     'PERSIST_AUTH': True,
+}
+
+DRF_STANDARDIZED_ERRORS = {
+    "ENABLE_IN_DEBUG_FOR_UNHANDLED_EXCEPTIONS": True,
+    "EXCEPTION_FORMATTER_CLASS": "kastina_forum.exception_formatter.ExceptionFormatter",
+}
+
+ADMINS = [
+    ("Lucky", "luckystarboy01@gmail.com"),
+]
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
+        },
+        "require_debug_true": {
+            "()": "django.utils.log.RequireDebugTrue",
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": "DEBUG",
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+        "file": {
+            "level": "DEBUG",
+            "class": "logging.FileHandler",
+            "filename": "debug.log",
+            "formatter": "verbose",
+        },
+        "error_file": {
+            "level": "ERROR",
+            "class": "logging.FileHandler",
+            "filename": "errors.log",
+            "formatter": "verbose",
+        },
+        "mail_admins": {
+            "level": "ERROR",
+            "class": "django.utils.log.AdminEmailHandler",
+            "filters": ["require_debug_false"],
+            "email_backend": "django.core.mail.backends.smtp.EmailBackend",
+            "include_html": True,
+        },
+    },
+    "formatters": {
+        "verbose": {
+            "format": "[%(asctime)s] [%(levelname)s] [%(name)s:%(lineno)d] - %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+        "standard": {
+            "format": "[%(asctime)s] [%(levelname)s] %(module)s - %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+        "json": {  # JSON formatter (optional for structured logging)
+            "format": '{"timestamp": "%(asctime)s", "level": "%(levelname)s", "module": "%(module)s", "line": %(lineno)d, "message": "%(message)s"}',
+            "datefmt": "%Y-%m-%dT%H:%M:%S",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["file", "mail_admins"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        "django.request": {
+            "handlers": ["console", "error_file"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
 }

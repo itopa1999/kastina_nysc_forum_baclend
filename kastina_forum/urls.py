@@ -24,6 +24,7 @@ urlpatterns = [
     path('backdoor/', admin.site.urls),
     path('admins/api/', include('administrator.urls')),
     path('forum/api/', include('forum.urls')),
+    path('chat/api/', include('chat.urls')),
     
         path(
         "doc/",
