@@ -38,5 +38,15 @@ urlpatterns = [
         )
     ),
     
+    path("user/",
+         include(
+            [
+                path("get/user/profile/<str:username>/activities/", UserProfileActivitiesView.as_view()),
+                path("get/user/<str:username>/posts/", UserRandomPostsView.as_view()),
+                path("search/", SearchView.as_view()),
+                
+            ]
+         ))
+    
     
 ]

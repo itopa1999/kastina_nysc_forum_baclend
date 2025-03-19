@@ -68,3 +68,5 @@ htmlcov/
 *.db
 *.sql
 *.sqlite
+.dump.rdb
+dump.rdb

@@ -2,6 +2,8 @@ from django.conf import settings
 from rest_framework import serializers
 from rest_framework.exceptions import ParseError
 
+from administrator.models import User
+
 from .models import Category, Like, Post, Comment
 
 
@@ -180,3 +182,28 @@ class CommentWriteSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+    
+    
+
+class SearchUserSerializer(serializers.ModelSerializer):
+    profile_picture = serializers.SerializerMethodField()
+    class Meta:
+        model = User
+        fields = ["id", "username", "profile_picture"]
+
+    def get_profile_picture(self, obj):
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.profile_picture.url)
+    
+    
+    
+class SearchPostSerializer(serializers.ModelSerializer):
+    category = serializers.CharField(source="category.name", read_only=True)
+    short_content = serializers.SerializerMethodField()
+    class Meta:
+        model = Post
+        fields = ["id", "short_content","category", "created_at"]
+        
+    def get_short_content(self, obj):
+        """Returns the first 50 characters of content"""
+        return obj.content[:30] + "..." if len(obj.content) > 30 else obj.content

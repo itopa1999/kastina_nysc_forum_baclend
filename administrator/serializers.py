@@ -32,6 +32,33 @@ class UserLoginSerializer(serializers.Serializer):
         return value
     
     
+    
+class ForgetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    
+    
+class ForgetPasswordVerificationTokenSerializer(serializers.Serializer):
+    token = serializers.IntegerField(required=True)
+    password = serializers.CharField(required=True)
+    
+    def validate_password(self, value):
+        if len(value) < 8:
+            raise ParseError("Password must be at least 8 characters long.")
+        return value
+    
+    
+    
+class ChangePasswordSerializer(serializers.Serializer):
+    password = serializers.CharField(required=True)
+    password1 = serializers.CharField(required=True)
+    password2 = serializers.CharField(required=True)
+    
+    def validate_password(self, value):
+        if len(value) < 8:
+            raise ParseError("Password must be at least 8 characters long.")
+        return value
+    
+    
   
 class CDS_GroupWriteSerializer(serializers.ModelSerializer):
     class Meta:

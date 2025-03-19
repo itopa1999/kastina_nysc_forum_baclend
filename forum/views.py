@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, Sum, Q, F
 
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -7,10 +7,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status, generics
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
 
+from administrator.models import User
 from administrator.permissions import CanCommentPermission, CanPostPermission, IsSuperAdminPermission
-from .serializers import CategoryWriteSerializer, CommentWriteSerializer, HomeCommentSerializer, HomePostSerializer, HomeTrendingPostSerializer, PostReadSerializer, PostWriteSerializer
+from .serializers import CategoryWriteSerializer, CommentWriteSerializer, HomeCommentSerializer, HomePostSerializer, HomeTrendingPostSerializer, PostReadSerializer, PostWriteSerializer, SearchPostSerializer, SearchUserSerializer
 from .models import Category, Like, Post, Comment
 # Create your views here.
 
@@ -83,6 +86,14 @@ class PostDetailView(generics.RetrieveAPIView):
     lookup_url_kwarg = "id"
     
     
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance.views = F("views") + 1  # Increment views using F() for atomic update
+        instance.save(update_fields=["views"])  # Save only the views field
+        instance.refresh_from_db()  # Refresh the instance to get updated views count
+        return super().retrieve(request, *args, **kwargs)
+    
+    
     
 
 class RandomPostsView(generics.ListAPIView):
@@ -93,7 +104,7 @@ class RandomPostsView(generics.ListAPIView):
         return Post.objects.select_related('user', 'category').only(
             'id', 'content', 'views', 'created_at',
             'user__username', 'category__name'
-        ).order_by('?')
+        )
 
     
     pagination_class = PageNumberPagination
@@ -115,7 +126,38 @@ class UserRandomPostsView(generics.ListAPIView):
         ).filter(user__username=username)
 
         # Order the posts randomly
-        return queryset.order_by('?')
+        return queryset
+    
+    
+    
+    
+class UserProfileActivitiesView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, username):
+        # Get user object
+        user = User.objects.filter(username=username).first()
+
+        if not user:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        posts_count = Post.objects.filter(user=user).count()
+
+        comments_count = Comment.objects.filter(post__user=user).count()
+
+        likes_count = Like.objects.filter(post__user=user).count()
+
+        total_views = Post.objects.filter(user=user).aggregate(Sum('views'))['views__sum'] or 0
+
+        # Prepare data to return
+        data = {
+            "total_posts": posts_count,
+            "total_comments": comments_count,
+            "total_likes": likes_count,
+            "total_views": total_views
+        }
+
+        return Response(data, status=status.HTTP_200_OK)
 
     
     
@@ -153,7 +195,7 @@ class HomePostCommentsView(generics.ListAPIView):
     
     
 
-class HomeLikePostView(generics.GenericAPIView):
+class HomeLikePostView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request, post_id, *args, **kwargs):
         user = request.user
@@ -193,12 +235,34 @@ class HomeCommentCreateView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            "notifications_group",
-            {
-                "type": "notification_message",
-                "message": "A new post has been made!"
-            }
-        )
+        # channel_layer = get_channel_layer()
+        # async_to_sync(channel_layer.group_send)(
+        #     "notifications_group",
+        #     {
+        #         "type": "notification_message",
+        #         "message": "A new post has been made!"
+        #     }
+        # )
         return Response({"detail": "commented"}, status=status.HTTP_201_CREATED)
+
+        
+        
+   
+class SearchView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        query = request.query_params.get("query", "").strip()
+        
+        if not query:
+            return Response({"error": "Query parameter 'query' is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Search for users matching the query
+        users = User.objects.filter(Q(username__icontains=query) | Q(email__icontains=query))
+        user_data = SearchUserSerializer(users, many=True, context={"request": request}).data
+
+        # Search for posts matching the query
+        posts = Post.objects.filter(Q(content__icontains=query) | Q(category__name__icontains=query))
+        post_data = SearchPostSerializer(posts, many=True).data
+
+        return Response({"users": user_data, "posts": post_data}, status=status.HTTP_200_OK)

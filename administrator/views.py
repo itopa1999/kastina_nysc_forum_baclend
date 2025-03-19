@@ -15,7 +15,7 @@ from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from administrator.permissions import IsCDSLeaderPermission
 from administrator.swagger import TaggedAutoSchema
 from .models import CDS_Group, User, UserVerification
-from .serializers import CDS_GroupReadSerializer, CDS_GroupWriteSerializer, RegUserSerializer, ResendVerificationTokenSerializer, UserLoginSerializer, UserVerificationSerializer
+from .serializers import CDS_GroupReadSerializer, CDS_GroupWriteSerializer, ChangePasswordSerializer, ForgetPasswordSerializer, ForgetPasswordVerificationTokenSerializer, RegUserSerializer, ResendVerificationTokenSerializer, UserLoginSerializer, UserVerificationSerializer
 
 
 
@@ -196,6 +196,130 @@ class LoginView(generics.GenericAPIView):
             
 
 
+class ForgetPasswordView(generics.GenericAPIView):
+    serializer_class = ForgetPasswordSerializer
+    swagger_schema = TaggedAutoSchema
+    def post(self, request, *args, **kwargs):
+        serializer = ForgetPasswordSerializer(data=request.data)
+
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            if not email:
+                return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                user = User.objects.get(email=email)
+                user_verification, created = UserVerification.objects.get_or_create(user=user)
+
+                # If the token is expired or not verified, generate a new token
+                if user_verification.is_token_expired() or user_verification.is_verified == False:
+                    user_verification.generate_token()
+                    user_verification.is_verified = False 
+                    user_verification.save()
+
+                    # Send the token via email
+                    send_mail(
+                        'Your Verification Token',
+                        f'Your verification token is {user_verification.token}, It expires in 10 minutes.',
+                        settings.EMAIL_HOST_USER,
+                        [user.email],
+                        fail_silently=False,
+                    )
+                    
+                    return Response({"message": "A verification token has been sent to your email."}, status=status.HTTP_200_OK)
+                
+                return Response({"message": "Token is still valid. Please check your email for the verification."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            except User.DoesNotExist:
+                return Response({"error": "User with this email does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
+class ForgetPasswordVerificationView(generics.GenericAPIView):
+    serializer_class = ForgetPasswordVerificationTokenSerializer
+    swagger_schema = TaggedAutoSchema
+    def post(self, request, *args, **kwargs):
+        
+        serializer = ForgetPasswordVerificationTokenSerializer(data=request.data)
+
+        if serializer.is_valid():
+            token = serializer.validated_data['token']
+            password = serializer.validated_data['password']
+            
+            if token == 6:
+                return Response({'error': 'Token must be 6 numbers'}, status=status.HTTP_400_BAD_REQUEST)    
+
+            try:
+                user_verification = UserVerification.objects.get(token=token)
+
+                # Check if the token has expired
+                if user_verification.is_token_expired():
+                    return Response({'error': 'Token has expired'}, status=status.HTTP_400_BAD_REQUEST)
+
+                # Check if the user has already been verified
+                if user_verification.is_verified:
+                    return Response({'error': 'Token has been already verified'}, status=status.HTTP_400_BAD_REQUEST)
+
+                user = user_verification.user
+                user.password = make_password(password)
+                user.save()
+            
+                user_verification.is_verified = True
+                user_verification.save()
+                
+                refresh = RefreshToken.for_user(user)
+                access_token = str(refresh.access_token)
+                expiration_time = datetime.fromtimestamp(AccessToken(access_token)["exp"])
+                profile_pic_url = request.build_absolute_uri(user.profile_picture.url) if user.profile_picture else None
+                return Response(
+                    {   "message":"Password has been changed successfully",
+                        "id": user.id,
+                        "email": user.email,
+                        "username":user.username,
+                        "profile_pic":profile_pic_url,
+                        "refresh": str(refresh),
+                        "access": access_token,
+                        "expiry": expiration_time,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            except UserVerification.DoesNotExist:
+                return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class ChangePasswordView(generics.GenericAPIView):
+    serializer_class = ChangePasswordSerializer
+    swagger_schema = TaggedAutoSchema
+    def post(self, request, *args, **kwargs):
+        serializer = ChangePasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            password = serializer.validated_data['password']
+            password1 = serializer.validated_data['password1']
+            password2 = serializer.validated_data['password2']
+            
+            if len(password) < 8 or len(password1) < 8 or len(password2) < 8:
+                return Response({'error': 'Password must be at least 8 characters long.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Ensure new password matches confirmation
+            if password1 != password2:
+                return Response({'error': 'New password and confirm password do not match.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            user = request.user
+            if not user.check_password(password):
+                return Response({"error": "Old Password is incorrect"}, status=status.HTTP_400_BAD_REQUEST)
+
+            user.password = make_password(password1)
+            user.save()
+                
+            
+            return Response({'message': 'Password Changed'}, status=status.HTTP_200_OK)
+    
+        return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CDS_GroupListCreateView(generics.ListCreateAPIView):
