@@ -13,6 +13,7 @@ urlpatterns = [
                 path("forget/password/", ForgetPasswordView.as_view()),
                 path("forget/password/verify/", ForgetPasswordVerificationView.as_view()),
                 path("change/password/", ChangePasswordView.as_view()),
+                path('verify/email/<uidb64>/<token>/', VerifyEmailView.as_view(), name='verify-email')
                 
                 
             ]

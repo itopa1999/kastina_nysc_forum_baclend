@@ -5,6 +5,10 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from datetime import datetime
 from django.db.models import Q
+from django.urls import reverse
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_decode
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -37,11 +41,18 @@ class RegisterUser(generics.GenericAPIView):
             
             user.is_active = False
             user.save()
+            
+            token = verification.token
+            uidb64 = urlsafe_base64_encode(force_bytes(user.id))
+            verification_link = request.build_absolute_uri(
+                reverse('verify-email', kwargs={'uidb64': uidb64, 'token': token})
+            )
 
             # Send the verification email with the token
             send_mail(
                 "Your Verification Code",
-                f"Your verification code is {verification.token}. It expires in 10 minutes.",
+                f"Use this code: {verification.token} (expires in 10 minutes)\n"
+                f"Or click the link to verify your email: {verification_link} ",
                 settings.EMAIL_HOST_USER,
                 [user.email],
                 fail_silently=False,
@@ -53,10 +64,37 @@ class RegisterUser(generics.GenericAPIView):
         return Response({"error":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
     
-    
 
 
 User = get_user_model()
+
+
+class VerifyEmailView(APIView):
+    def get(self, request, uidb64, token):
+        try:
+            uid = urlsafe_base64_decode(uidb64).decode()
+            user = get_object_or_404(User, id=uid)
+            verification = get_object_or_404(UserVerification, user=user, token=token)
+            
+            if verification.is_token_expired():
+                    return Response({'error': 'Link has expired'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Check if the user has already been verified
+            if verification.is_verified:
+                return Response({'error': 'Link is already verified'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Activate user
+            user.is_active = True
+            user.save()
+
+            verification.is_verified = True
+            verification.save()
+
+            return Response({"message": "Your email has been verified successfully! please go back to login"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": "Invalid or expired link."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        
 
 class UserVerificationView(generics.GenericAPIView):
     serializer_class = UserVerificationSerializer
@@ -136,11 +174,18 @@ class ResendVerificationTokenView(generics.GenericAPIView):
                     user_verification.generate_token()  # Regenerate token
                     user_verification.is_verified = False  # Reset verification status
                     user_verification.save()
+                    
+                    token = user_verification.token
+                    uidb64 = urlsafe_base64_encode(force_bytes(user.id))
+                    verification_link = request.build_absolute_uri(
+                        reverse('verify-email', kwargs={'uidb64': uidb64, 'token': token})
+                    )
 
                     # Send the token via email
                     send_mail(
-                        'Your Verification Token',
-                        f'Your verification token is {user_verification.token}, It expires in 10 minutes.',
+                        "Your Verification Code",
+                        f"Use this code: {user_verification.token} (expires in 10 minutes)\n"
+                        f"Or click the link to verify your email: {verification_link} ",
                         settings.EMAIL_HOST_USER,
                         [user.email],
                         fail_silently=False,

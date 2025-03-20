@@ -175,7 +175,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "Media")
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 if DEBUG:
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 else:
     EMAIL_BACKEND ='django.core.mail.backends.smtp.EmailBackend'
     
