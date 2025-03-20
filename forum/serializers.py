@@ -102,7 +102,7 @@ class HomePostSerializer(serializers.ModelSerializer):
 
     def get_short_content(self, obj):
         """Returns the first 50 characters of content"""
-        return obj.content[:200] + "..." if len(obj.content) > 200 else obj.content
+        return obj.content[:100] + "................." if len(obj.content) > 100 else obj.content
     
     def get_total_comment(self, obj):
         """Returns the total number of comments for this post"""
@@ -139,7 +139,7 @@ class HomeTrendingPostSerializer(serializers.ModelSerializer):
 
     def get_short_content(self, obj):
         """Returns the first 50 characters of content"""
-        return obj.content[:30] + "..." if len(obj.content) > 30 else obj.content
+        return obj.content[:30] + "................." if len(obj.content) > 30 else obj.content
     
     def get_total_comment(self, obj):
         """Returns the total number of comments for this post"""
@@ -206,4 +206,4 @@ class SearchPostSerializer(serializers.ModelSerializer):
         
     def get_short_content(self, obj):
         """Returns the first 50 characters of content"""
-        return obj.content[:30] + "..." if len(obj.content) > 30 else obj.content
+        return obj.content[:30] + "................." if len(obj.content) > 30 else obj.content
