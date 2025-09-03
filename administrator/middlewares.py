@@ -2,7 +2,7 @@ import jwt
 from urllib.parse import parse_qs
 from channels.middleware import BaseMiddleware
 from channels.db import database_sync_to_async
-
+from rest_framework_simplejwt.exceptions import TokenError
 
 from django.apps import apps
 
@@ -15,18 +15,22 @@ class JWTAuthMiddleware(BaseMiddleware):
         if not token:
             from django.contrib.auth.models import AnonymousUser
             scope["user"] = AnonymousUser()
+            return await super().__call__(scope, receive, send)
         else:
+            from django.contrib.auth.models import AnonymousUser
             try:
                 from rest_framework_simplejwt.tokens import AccessToken
-                decoded_data = AccessToken(token)
-                user = await get_user(decoded_data["user_id"])
-                scope["user"] = user if user else AnonymousUser()
-            except jwt.ExpiredSignatureError:
-                scope["user"] = AnonymousUser()
-            except jwt.InvalidTokenError:
+                decoded_token = AccessToken(token)
+                decoded_token.verify()  # Explicit verification
+                user = await get_user(decoded_token["user_id"])
+                scope["user"] = user or AnonymousUser()
+            except TokenError as e:
+                # Catches ALL JWT errors (expired, invalid, etc)
+                print(f"Token error: {str(e)}")  # Log for debugging
                 scope["user"] = AnonymousUser()
 
         return await super().__call__(scope, receive, send)
+
 
 @database_sync_to_async
 def get_user(user_id):

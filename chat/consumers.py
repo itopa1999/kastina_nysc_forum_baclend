@@ -23,7 +23,6 @@ class GroupChatConsumer(AsyncWebsocketConsumer):
             await self.add_user_to_group(self.user, group)
 
         # Add the user to the group channel
-        self.group_name = f'{self.group_name}'
         await self.channel_layer.group_add(
             self.group_name,
             self.channel_name
